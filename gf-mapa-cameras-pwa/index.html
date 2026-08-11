@@ -1,0 +1,813 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>Editor de Mapa de Câmaras — GF</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#0a0e1a">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Mapa Câmaras">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<script src="vendor/html2canvas.min.js"></script>
+<script src="vendor/jspdf.umd.min.js"></script>
+<style>
+  :root{
+    --bg:#0a0e1a; --panel:#111827; --panel-2:#161f33; --border:#26314a; --border-soft:#1c2438;
+    --text:#eef1f7; --text-dim:#8b93ab; --text-faint:#5a6280;
+    --accent:#ff7a3d; --accent-dim:rgba(255,122,61,0.15);
+    --blue:#4f8cff; --green:#33c58e; --purple:#b380ff; --danger:#ef5b5b; --yellow:#f2c14e;
+    font-family: 'Inter', ui-sans-serif, system-ui, sans-serif;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--text);overscroll-behavior:none;}
+  body{min-height:100vh;-webkit-user-select:none;user-select:none;}
+  .app{display:flex;flex-direction:column;height:100vh;min-height:640px;}
+
+  .topbar{display:flex;align-items:center;justify-content:space-between;padding:10px 18px;border-bottom:1px solid var(--border);background:linear-gradient(180deg,#0d1220,#0a0e1a);flex-wrap:wrap;gap:10px;}
+  .brand{display:flex;align-items:center;gap:10px;}
+  .brand .mark{width:28px;height:28px;border-radius:7px;background:var(--accent);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:13px;color:#1a0d05;}
+  .brand h1{font-size:14px;font-weight:700;letter-spacing:.2px;margin:0;}
+  .brand p{font-size:10.5px;color:var(--text-dim);margin:0;font-family:'JetBrains Mono',monospace;}
+
+  .toolbar{display:flex;gap:6px;flex-wrap:wrap;align-items:center;}
+  .tbtn{display:flex;align-items:center;gap:6px;background:var(--panel-2);border:1px solid var(--border);color:var(--text);padding:7px 12px;border-radius:8px;font-size:11.5px;font-weight:600;cursor:pointer;transition:all .12s ease;white-space:nowrap;}
+  .tbtn:hover{border-color:var(--accent);color:var(--accent);}
+  .tbtn.active{background:var(--accent);border-color:var(--accent);color:#1a0d05;}
+  .tbtn svg{width:13px;height:13px;flex-shrink:0;}
+  .sep{width:1px;height:22px;background:var(--border);margin:0 2px;}
+  input[type=file]{display:none;}
+
+  .docbar{display:flex;gap:10px;padding:8px 18px;border-bottom:1px solid var(--border-soft);background:#0c1120;flex-wrap:wrap;align-items:center;}
+  .docbar label{font-size:10px;color:var(--text-faint);text-transform:uppercase;letter-spacing:.4px;font-weight:700;margin-right:4px;}
+  .docbar input, .docbar select{background:var(--panel-2);border:1px solid var(--border);color:var(--text);padding:5px 9px;border-radius:6px;font-size:12px;font-family:'Inter',sans-serif;}
+  .docbar input#docEvento{min-width:220px;}
+  .docbar select#sportSelect{min-width:200px;font-weight:600;}
+  .docbar select#sportSelect:focus, .docbar input:focus{outline:none;border-color:var(--accent);}
+  .fop-tag{font-size:9.5px;padding:2px 8px;border-radius:20px;font-weight:700;text-transform:uppercase;letter-spacing:.3px;}
+  .fop-tag.oficial{background:rgba(51,197,142,0.15);color:var(--green);border:1px solid rgba(51,197,142,0.35);}
+  .fop-tag.esquema{background:rgba(242,193,78,0.15);color:var(--yellow);border:1px solid rgba(242,193,78,0.35);}
+
+  .main{display:flex;flex:1;min-height:0;}
+  .canvas-wrap{flex:1;position:relative;background:radial-gradient(circle at 30% 20%, #0d1424 0%, #080b14 70%);overflow:hidden;display:flex;align-items:center;justify-content:center;padding:20px;}
+  .canvas-frame{position:relative;width:100%;height:100%;max-width:1200px;border:1px solid var(--border);border-radius:12px;overflow:hidden;background:#0c1120;box-shadow:0 10px 40px rgba(0,0,0,0.45);}
+  input, textarea, select{-webkit-user-select:auto;user-select:auto;}
+  svg#stage{width:100%;height:100%;display:block;cursor:crosshair;touch-action:none;}
+  svg#stage.mode-select{cursor:default;}
+
+  .hint-badge{position:absolute;top:12px;left:12px;background:rgba(10,14,26,0.85);border:1px solid var(--border);padding:6px 12px;border-radius:20px;font-size:10.5px;color:var(--text-dim);font-family:'JetBrains Mono',monospace;pointer-events:none;}
+  .hint-badge.on{color:var(--accent);border-color:var(--accent);}
+
+  .side{width:360px;flex-shrink:0;border-left:1px solid var(--border);background:var(--panel);display:flex;flex-direction:column;min-height:0;}
+  .side-section{padding:14px 16px;border-bottom:1px solid var(--border-soft);}
+  .side-title{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--text-dim);margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;}
+  .empty-note{font-size:11.5px;color:var(--text-faint);line-height:1.5;padding:6px 0;}
+
+  .field{margin-bottom:9px;}
+  .field label{display:block;font-size:10px;color:var(--text-dim);margin-bottom:4px;font-weight:600;text-transform:uppercase;letter-spacing:.3px;}
+  .field input, .field select, .field textarea{width:100%;background:var(--panel-2);border:1px solid var(--border);color:var(--text);padding:7px 9px;border-radius:6px;font-size:12.5px;font-family:'Inter',sans-serif;}
+  .field textarea{resize:vertical;min-height:44px;font-family:'Inter',sans-serif;}
+  .field input:focus, .field select:focus, .field textarea:focus{outline:none;border-color:var(--accent);}
+  .field-row{display:flex;gap:8px;}
+  .field-row .field{flex:1;}
+  .del-btn{width:100%;margin-top:6px;background:rgba(239,91,91,0.1);border:1px solid rgba(239,91,91,0.35);color:var(--danger);padding:8px;border-radius:7px;font-size:11.5px;font-weight:700;cursor:pointer;}
+  .del-btn:hover{background:rgba(239,91,91,0.2);}
+
+  .list-wrap{flex:1;overflow-y:auto;min-height:0;}
+  .cam-row{display:flex;align-items:center;gap:10px;padding:9px 16px;border-bottom:1px solid var(--border-soft);cursor:pointer;transition:background .1s;}
+  .cam-row:hover{background:var(--panel-2);}
+  .cam-row.selected{background:var(--accent-dim);}
+  .cam-dot{width:26px;height:26px;flex-shrink:0;display:flex;align-items:center;justify-content:center;}
+  .cam-info{flex:1;min-width:0;}
+  .cam-info .l1{font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .cam-info .l2{font-size:10px;color:var(--text-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-family:'JetBrains Mono',monospace;}
+  .count-pill{font-family:'JetBrains Mono',monospace;font-size:10px;background:var(--panel-2);border:1px solid var(--border);color:var(--text-dim);padding:1px 7px;border-radius:20px;}
+
+  .cam-pin .ring{fill:var(--panel);stroke-width:2;transition:filter .1s;}
+  .cam-pin text{font-family:'JetBrains Mono',monospace;font-size:10.5px;font-weight:700;fill:var(--text);text-anchor:middle;dominant-baseline:central;pointer-events:none;}
+  .cam-pin{cursor:grab;}
+  .cam-pin.dragging{cursor:grabbing;}
+  .cam-pin.selected .ring{stroke-width:3;filter:drop-shadow(0 0 6px currentColor);}
+
+  .annot-arrow, .annot-line{cursor:grab;}
+  .annot-arrow.selected, .annot-line.selected{filter:drop-shadow(0 0 4px var(--accent));}
+  .annot-text-bg{fill:rgba(10,14,26,0.85);stroke:var(--accent);stroke-width:1;cursor:grab;}
+  .annot-text-bg.selected{filter:drop-shadow(0 0 4px var(--accent));}
+  .annot-text-el{font-family:'Inter',sans-serif;font-size:13px;fill:#fff;pointer-events:none;}
+  .endpoint-handle{fill:var(--accent);stroke:#fff;stroke-width:1.5;cursor:grab;opacity:0;pointer-events:none;transition:opacity .1s;}
+  .endpoint-handle.show{opacity:1;pointer-events:auto;}
+  .endpoint-handle:hover{fill:#fff;stroke:var(--accent);}
+
+  ::-webkit-scrollbar{width:8px;}
+  ::-webkit-scrollbar-thumb{background:var(--border);border-radius:4px;}
+
+  /* Export document — light/print theme */
+  #exportRoot{position:fixed;left:-9999px;top:0;width:1160px;background:#ffffff;color:#12161f;font-family:'Inter',ui-sans-serif,sans-serif;padding:28px;}
+  .exp-header{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:2px solid #ff7a3d;padding-bottom:14px;margin-bottom:18px;}
+  .exp-header .mark{width:32px;height:32px;border-radius:8px;background:#ff7a3d;display:inline-flex;align-items:center;justify-content:center;font-weight:800;color:#ffffff;font-size:14px;margin-right:10px;vertical-align:middle;}
+  .exp-header h2{font-size:20px;margin:0;font-weight:800;display:inline;vertical-align:middle;color:#12161f;}
+  .exp-header .sub{font-size:11px;color:#6b7280;font-family:'JetBrains Mono',monospace;margin-top:4px;}
+  .exp-header .date{font-size:12px;color:#6b7280;font-family:'JetBrains Mono',monospace;text-align:right;}
+  .exp-canvas-box{border:1px solid #d8dce4;border-radius:10px;overflow:hidden;background:#ffffff;margin-bottom:16px;}
+  .exp-legend{display:flex;gap:16px;flex-wrap:wrap;margin-bottom:18px;}
+  .exp-legend .sw{display:flex;align-items:center;gap:6px;font-size:11px;color:#374151;font-family:'JetBrains Mono',monospace;}
+  .exp-summary{display:flex;gap:24px;margin-bottom:18px;}
+  .exp-summary .stat{background:#f5f6f8;border:1px solid #d8dce4;border-radius:8px;padding:10px 16px;}
+  .exp-summary .stat .n{font-size:20px;font-weight:800;font-family:'JetBrains Mono',monospace;color:#ff7a3d;}
+  .exp-summary .stat .l{font-size:10px;color:#6b7280;text-transform:uppercase;letter-spacing:.4px;}
+  .exp-table{width:100%;border-collapse:collapse;font-size:11.5px;margin-bottom:18px;}
+  .exp-table th{background:#f5f6f8;color:#6b7280;text-transform:uppercase;font-size:9.5px;letter-spacing:.4px;text-align:left;padding:8px 10px;border-bottom:1px solid #d8dce4;}
+  .exp-table td{padding:8px 10px;border-bottom:1px solid #e8eaee;vertical-align:middle;color:#12161f;}
+
+  @media (max-width:820px){ .side{width:300px;} .brand p{display:none;} }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="topbar">
+    <div class="brand">
+      <div class="mark">GF</div>
+      <div><h1>Editor de Mapa de Câmaras</h1><p>PROTÓTIPO — gerar FOP, arrastar, anotar, exportar</p></div>
+    </div>
+    <div class="toolbar">
+      <button class="tbtn" id="btnAddCam"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="2.5"/></svg>Câmara</button>
+      <div class="sep"></div>
+      <button class="tbtn" id="btnAddArrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="19" x2="19" y2="5"/><polyline points="9 5 19 5 19 15"/></svg>Seta</button>
+      <button class="tbtn" id="btnAddDash"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-dasharray="3 2"><line x1="4" y1="12" x2="20" y2="12"/></svg>Linha tracejada</button>
+      <button class="tbtn" id="btnAddText"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="14" rx="2"/><line x1="7" y1="10" x2="17" y2="10"/><line x1="7" y1="14" x2="13" y2="14"/></svg>Texto</button>
+      <div class="sep"></div>
+      <button class="tbtn" id="btnAutoPlan" title="Gera um plano de câmaras seguindo princípios base de produção"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2L3 14h7l-1 8 10-12h-7l1-8z"/></svg>Plano Automático</button>
+      <input type="number" id="autoCamCount" min="3" max="10" value="10" style="width:48px;background:var(--panel-2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:6px 4px;font-size:11.5px;text-align:center;" title="Número de câmaras (3–10)">
+      <div class="sep"></div>
+      <button class="tbtn" id="btnUpload"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M12 12V3m0 0L7 8m5-5l5 5"/></svg>Carregar planta própria</button>
+      <input type="file" id="fileInput" accept="image/*">
+      <div class="sep"></div>
+      <button class="tbtn" id="btnPng">Exportar PNG</button>
+      <button class="tbtn" id="btnPdf">Exportar PDF</button>
+    </div>
+  </div>
+
+  <div class="docbar">
+    <label>Evento / Recinto</label>
+    <input type="text" id="docEvento" value="Lima 2027 — Estádio Nacional" placeholder="Nome do evento e recinto">
+    <label>Data</label>
+    <input type="text" id="docData" value="Julho 2027" placeholder="Data">
+    <label>FOP</label>
+    <select id="sportSelect">
+      <option value="grelha" selected>— Sem FOP (grelha) —</option>
+      <option value="futebol">Futebol</option>
+      <option value="futsal">Futsal</option>
+      <option value="basquetebol">Basquetebol</option>
+      <option value="andebol">Andebol</option>
+      <option value="voleibol">Voleibol</option>
+      <option value="atletismo">Atletismo — pista 400m</option>
+      <option value="hoquei_patins">Hóquei em Patins</option>
+      <option value="tenis">Ténis</option>
+      <option value="padel">Padel</option>
+      <option value="tenis_mesa">Ténis de Mesa</option>
+      <optgroup label="Desportos de Luta">
+        <option value="taekwondo">Taekwondo</option>
+        <option value="karate">Karaté</option>
+        <option value="judo">Judo</option>
+        <option value="boxe">Boxe</option>
+        <option value="luta_livre">Luta Livre</option>
+      </optgroup>
+    </select>
+    <span class="fop-tag oficial" id="fopTag" style="display:none;"></span>
+  </div>
+
+  <div class="main">
+    <div class="canvas-wrap">
+      <div class="canvas-frame" id="captureFrame">
+        <svg id="stage" viewBox="0 0 1000 640" preserveAspectRatio="xMidYMid meet">
+          <defs>
+            <pattern id="gridPattern" width="40" height="40" patternUnits="userSpaceOnUse">
+              <path d="M40 0H0V40" fill="none" stroke="#182238" stroke-width="1"/>
+            </pattern>
+            <marker id="arrowHead" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto" markerUnits="strokeWidth">
+              <path d="M0,0 L6,3 L0,6 Z" fill="#f2c14e"/>
+            </marker>
+          </defs>
+          <rect id="bgRect" x="0" y="0" width="1000" height="640" fill="#0c1120"/>
+          <rect x="0" y="0" width="1000" height="640" fill="url(#gridPattern)" id="gridOverlay"/>
+          <g id="fopLayer"></g>
+          <image id="bgImage" x="0" y="0" width="1000" height="640" style="display:none" preserveAspectRatio="xMidYMid meet"/>
+          <g id="annotLayer"></g>
+          <g id="camsLayer"></g>
+        </svg>
+      </div>
+      <div class="hint-badge" id="modeHint">Modo: seleção — escolhe um desporto acima para gerar o FOP</div>
+    </div>
+
+    <div class="side">
+      <div class="side-section" id="editorSection">
+        <div class="side-title">Detalhe</div>
+        <div class="empty-note" id="editorEmpty">Seleciona um elemento no plano, ou adiciona um novo, para editar aqui.</div>
+        <div id="editorForm" style="display:none;"></div>
+      </div>
+      <div class="side-section" style="border-bottom:none;flex:1;display:flex;flex-direction:column;min-height:0;padding-bottom:0;">
+        <div class="side-title">Câmaras <span class="count-pill" id="camCount">0</span></div>
+      </div>
+      <div class="list-wrap" id="camList"></div>
+    </div>
+  </div>
+</div>
+
+<div id="exportRoot"></div>
+
+<script>
+(function(){
+  const svg = document.getElementById('stage');
+  const camsLayer = document.getElementById('camsLayer');
+  const annotLayer = document.getElementById('annotLayer');
+  const fopLayer = document.getElementById('fopLayer');
+  const fopTag = document.getElementById('fopTag');
+  const camList = document.getElementById('camList');
+  const camCount = document.getElementById('camCount');
+  const editorForm = document.getElementById('editorForm');
+  const editorEmpty = document.getElementById('editorEmpty');
+  const modeHint = document.getElementById('modeHint');
+  const bgImage = document.getElementById('bgImage');
+  const gridOverlay = document.getElementById('gridOverlay');
+  const sportSelect = document.getElementById('sportSelect');
+
+  // ---------------- Camera taxonomy (tipo = forma do ícone, categoria = cor, ambos editáveis) ----------------
+  const CATEGORIES = [
+    {key:'wide', label:'Wide', color:'#4f8cff'},
+    {key:'closeup', label:'Closeup', color:'#ff7a3d'},
+    {key:'handheld', label:'Handheld', color:'#33c58e'},
+    {key:'special', label:'Special', color:'#b380ff'},
+  ];
+  const TYPES = [
+    {key:'normal', label:'Normal', defaultCategory:'wide'},
+    {key:'ssm', label:'SSM', defaultCategory:'wide'},
+    {key:'usm', label:'USM', defaultCategory:'closeup'},
+    {key:'ptz', label:'PTZ', defaultCategory:'closeup'},
+    {key:'minicam', label:'Minicam', defaultCategory:'special'},
+    {key:'skycam', label:'Skycam / 4Sky', defaultCategory:'special'},
+    {key:'drone', label:'Drone', defaultCategory:'special'},
+    {key:'cablecam', label:'Cablecam', defaultCategory:'special'},
+    {key:'railcam', label:'Railcam', defaultCategory:'special'},
+    {key:'gimbal', label:'Gimbal', defaultCategory:'handheld'},
+    {key:'wearable', label:'Wearable', defaultCategory:'handheld'},
+    {key:'jib', label:'Jib', defaultCategory:'special'},
+    {key:'polecam', label:'Polecam', defaultCategory:'special'},
+    {key:'qball', label:'Qball', defaultCategory:'special'},
+  ];
+  function catFor(key){ return CATEGORIES.find(c=>c.key===key) || CATEGORIES[0]; }
+  function typeFor(key){ return TYPES.find(t=>t.key===key) || TYPES[0]; }
+  function colorForCat(key){ return catFor(key).color; }
+
+  const ICONS = {
+    normal:   (r)=>`<circle class="ring" r="${r}"/>`,
+    ssm:      (r)=>`<circle class="ring" r="${r}"/><circle r="${r*0.4}" fill="currentColor" opacity="0.5"/>`,
+    usm:      (r)=>`<rect class="ring" x="${-r*0.82}" y="${-r*0.82}" width="${r*1.64}" height="${r*1.64}" rx="2"/>`,
+    ptz:      (r)=>`<rect class="ring" x="${-r*0.82}" y="${-r*0.82}" width="${r*1.64}" height="${r*1.64}" rx="${r*0.82}"/><circle r="${r*0.28}" fill="currentColor"/>`,
+    minicam:  (r)=>`<polygon class="ring" points="${poly(6,r*0.95)}"/>`,
+    skycam:   (r)=>`<polygon class="ring" points="0,${-r*1.15} ${r*1.15},0 0,${r*1.15} ${-r*1.15},0"/><line x1="${-r*1.15}" y1="0" x2="${r*1.15}" y2="0" stroke="currentColor" stroke-width="1"/><line x1="0" y1="${-r*1.15}" x2="0" y2="${r*1.15}" stroke="currentColor" stroke-width="1"/>`,
+    drone:    (r)=>`<circle class="ring" r="${r*0.55}"/><line x1="${-r*1.1}" y1="${-r*1.1}" x2="${r*1.1}" y2="${r*1.1}" stroke="currentColor" stroke-width="2"/><line x1="${-r*1.1}" y1="${r*1.1}" x2="${r*1.1}" y2="${-r*1.1}" stroke="currentColor" stroke-width="2"/><circle cx="${-r*1.1}" cy="${-r*1.1}" r="${r*0.32}" fill="currentColor"/><circle cx="${r*1.1}" cy="${-r*1.1}" r="${r*0.32}" fill="currentColor"/><circle cx="${-r*1.1}" cy="${r*1.1}" r="${r*0.32}" fill="currentColor"/><circle cx="${r*1.1}" cy="${r*1.1}" r="${r*0.32}" fill="currentColor"/>`,
+    cablecam: (r)=>`<line x1="${-r*1.3}" y1="0" x2="${r*1.3}" y2="0" stroke="currentColor" stroke-width="1.5" stroke-dasharray="3 2"/><polygon class="ring" points="0,${-r*0.85} ${r*0.85},${r*0.6} ${-r*0.85},${r*0.6}"/>`,
+    railcam:  (r)=>`<rect x="${-r*1.25}" y="${-r*0.15}" width="${r*2.5}" height="${r*0.3}" fill="currentColor" opacity="0.6"/><rect class="ring" x="${-r*0.65}" y="${-r*0.65}" width="${r*1.3}" height="${r*1.3}" rx="2"/>`,
+    gimbal:   (r)=>`<circle class="ring" r="${r}"/><circle r="${r*0.62}" fill="none" stroke="currentColor" stroke-width="1"/>`,
+    wearable: (r)=>`<polygon class="ring" points="0,${-r*1.1} ${r*0.95},${r*0.55} ${-r*0.95},${r*0.55}"/><circle r="${r*0.22}" fill="currentColor"/>`,
+    jib:      (r)=>`<line x1="${-r*1.2}" y1="${r*0.7}" x2="${r*1.2}" y2="${-r*0.7}" stroke="currentColor" stroke-width="2.5"/><circle class="ring" cx="${r*1.2}" cy="${-r*0.7}" r="${r*0.55}"/>`,
+    polecam:  (r)=>`<line x1="0" y1="${-r*1.3}" x2="0" y2="${r*1.3}" stroke="currentColor" stroke-width="2.5"/><circle class="ring" cx="0" cy="${-r*1.1}" r="${r*0.55}"/>`,
+    qball:    (r)=>`<circle class="ring" r="${r}"/><circle r="${r*0.75}" fill="none" stroke="currentColor" stroke-width="0.8"/><circle r="${r*0.5}" fill="none" stroke="currentColor" stroke-width="0.8"/>`,
+  };
+  function poly(n,r){
+    let pts=[];
+    for(let i=0;i<n;i++){ const a=(Math.PI*2/n)*i - Math.PI/2; pts.push(`${(r*Math.cos(a)).toFixed(1)},${(r*Math.sin(a)).toFixed(1)}`); }
+    return pts.join(' ');
+  }
+
+  let cameras = [], annots = [], camSeq = 1, annotSeq = 1, selected = null, mode = 'select', drag = null;
+
+  function svgPoint(evt){
+    const pt = svg.createSVGPoint(); pt.x = evt.clientX; pt.y = evt.clientY;
+    return pt.matrixTransform(svg.getScreenCTM().inverse());
+  }
+
+  // ---------------- FOP GENERATOR ----------------
+  function makeScale(Wm, Lm, maxW, maxH){
+    maxW = maxW || 860; maxH = maxH || 440;
+    const s = Math.min(maxW/Lm, maxH/Wm);
+    const ox = 500 - (Lm*s)/2, oy = 320 - (Wm*s)/2;
+    return { s, ox, oy, x:(mx)=>ox+mx*s, y:(my)=>oy+my*s };
+  }
+  function arcPath(cx,cy,r,a0,a1){
+    const p0x = cx+r*Math.cos(a0), p0y = cy+r*Math.sin(a0);
+    const p1x = cx+r*Math.cos(a1), p1y = cy+r*Math.sin(a1);
+    const large = (a1-a0) > Math.PI ? 1 : 0;
+    return `M ${p0x} ${p0y} A ${r} ${r} 0 ${large} 1 ${p1x} ${p1y}`;
+  }
+  function fightMat(sc, Wm, contestM){
+    const half=(Wm-contestM)/2;
+    let html = `<rect x="${sc.ox}" y="${sc.oy}" width="${Wm*sc.s}" height="${Wm*sc.s}" fill="#1d6e4f" stroke="#26314a" stroke-width="1.5"/>`;
+    html += `<rect x="${sc.x(half)}" y="${sc.y(half)}" width="${contestM*sc.s}" height="${contestM*sc.s}" fill="#f2c14e" fill-opacity="0.18" stroke="#f2c14e" stroke-width="1.2"/>`;
+    return html;
+  }
+
+  const SPORTS = {
+    atletismo: { label:'Atletismo — Pista 400m', group:'oficial', Wm:92.52, Lm:176.91,
+      build(sc){
+        const laneBand = 8*1.22*sc.s, outerH = 92.52*sc.s, outerW = 176.91*sc.s;
+        const inX = sc.ox+laneBand, inY = sc.oy+laneBand, inW = outerW-2*laneBand, inH = outerH-2*laneBand;
+        let html = `<rect x="${sc.ox}" y="${sc.oy}" width="${outerW}" height="${outerH}" rx="${outerH/2}" fill="#a33832" stroke="#ffffff" stroke-width="1.5"/>`;
+        for(let i=1;i<=3;i++){ const inset = laneBand*(i/4); const w=outerW-2*inset, h=outerH-2*inset;
+          html += `<rect x="${sc.ox+inset}" y="${sc.oy+inset}" width="${w}" height="${h}" rx="${h/2}" fill="none" stroke="rgba(255,255,255,0.35)" stroke-width="0.8"/>`; }
+        html += `<rect x="${inX}" y="${inY}" width="${inW}" height="${inH}" rx="${inH/2}" fill="#1e392a" stroke="#2a4d36" stroke-width="1.5"/>`;
+        return html;
+      }},
+    futebol: { label:'Futebol', group:'oficial', Wm:68, Lm:105,
+      build(sc){
+        const W=68*sc.s, L=105*sc.s;
+        let html = `<rect x="${sc.ox}" y="${sc.oy}" width="${L}" height="${W}" fill="#1e392a" stroke="#ffffff" stroke-width="1.5"/>`;
+        html += `<line x1="${sc.x(52.5)}" y1="${sc.oy}" x2="${sc.x(52.5)}" y2="${sc.oy+W}" stroke="#fff" stroke-width="1"/>`;
+        html += `<circle cx="${sc.x(52.5)}" cy="${sc.y(34)}" r="${9.15*sc.s}" fill="none" stroke="#fff" stroke-width="1"/>`;
+        [0, 105-16.5].forEach((px,i)=>{
+          html += `<rect x="${sc.x(px)}" y="${sc.y((68-40.32)/2)}" width="${16.5*sc.s}" height="${40.32*sc.s}" fill="none" stroke="#fff" stroke-width="1"/>`;
+          html += `<rect x="${sc.x(i===0?0:105-5.5)}" y="${sc.y((68-18.32)/2)}" width="${5.5*sc.s}" height="${18.32*sc.s}" fill="none" stroke="#fff" stroke-width="1"/>`;
+        });
+        return html;
+      }},
+    futsal: { label:'Futsal', group:'oficial', Wm:20, Lm:40,
+      build(sc){
+        const W=20*sc.s, L=40*sc.s;
+        let html = `<rect x="${sc.ox}" y="${sc.oy}" width="${L}" height="${W}" fill="#1e392a" stroke="#ffffff" stroke-width="1.5"/>`;
+        html += `<line x1="${sc.x(20)}" y1="${sc.oy}" x2="${sc.x(20)}" y2="${sc.oy+W}" stroke="#fff" stroke-width="1"/>`;
+        html += `<circle cx="${sc.x(20)}" cy="${sc.y(10)}" r="${3*sc.s}" fill="none" stroke="#fff" stroke-width="1"/>`;
+        [0,40].forEach((px,i)=>{ html += `<path d="${arcPath(sc.x(px), sc.y(10), 6*sc.s, i===0?-Math.PI/2:Math.PI/2, i===0?Math.PI/2:Math.PI*1.5)}" fill="none" stroke="#fff" stroke-width="1"/>`; });
+        return html;
+      }},
+    basquetebol: { label:'Basquetebol', group:'oficial', Wm:15, Lm:28,
+      build(sc){
+        const W=15*sc.s, L=28*sc.s;
+        let html = `<rect x="${sc.ox}" y="${sc.oy}" width="${L}" height="${W}" fill="#c99a5b" stroke="#ffffff" stroke-width="1.5"/>`;
+        html += `<line x1="${sc.x(14)}" y1="${sc.oy}" x2="${sc.x(14)}" y2="${sc.oy+W}" stroke="#fff" stroke-width="1"/>`;
+        html += `<circle cx="${sc.x(14)}" cy="${sc.y(7.5)}" r="${1.8*sc.s}" fill="none" stroke="#fff" stroke-width="1"/>`;
+        [0, 28-5.8].forEach((px)=>{ html += `<rect x="${sc.x(px)}" y="${sc.y((15-4.9)/2)}" width="${5.8*sc.s}" height="${4.9*sc.s}" fill="none" stroke="#fff" stroke-width="1"/>`; });
+        html += `<path d="${arcPath(sc.x(1.575), sc.y(7.5), 6.75*sc.s, -1.0, 1.0)}" fill="none" stroke="#fff" stroke-width="1"/>`;
+        html += `<path d="${arcPath(sc.x(28-1.575), sc.y(7.5), 6.75*sc.s, Math.PI-1.0, Math.PI+1.0)}" fill="none" stroke="#fff" stroke-width="1"/>`;
+        return html;
+      }},
+    andebol: { label:'Andebol', group:'oficial', Wm:20, Lm:40,
+      build(sc){
+        let html = `<rect x="${sc.ox}" y="${sc.oy}" width="${40*sc.s}" height="${20*sc.s}" fill="#1e392a" stroke="#fff" stroke-width="1.5"/>`;
+        html += `<line x1="${sc.x(20)}" y1="${sc.oy}" x2="${sc.x(20)}" y2="${sc.oy+20*sc.s}" stroke="#fff" stroke-width="1"/>`;
+        [0,40].forEach((px,i)=>{
+          html += `<path d="${arcPath(sc.x(px), sc.y(10), 6*sc.s, i===0?-Math.PI/2:Math.PI/2, i===0?Math.PI/2:Math.PI*1.5)}" fill="none" stroke="#fff" stroke-width="1"/>`;
+          html += `<path d="${arcPath(sc.x(px), sc.y(10), 9*sc.s, i===0?-Math.PI/2:Math.PI/2, i===0?Math.PI/2:Math.PI*1.5)}" fill="none" stroke="rgba(255,255,255,0.5)" stroke-width="0.8" stroke-dasharray="3 2"/>`;
+        });
+        return html;
+      }},
+    voleibol: { label:'Voleibol', group:'oficial', Wm:9, Lm:18,
+      build(sc){
+        let html = `<rect x="${sc.ox}" y="${sc.oy}" width="${18*sc.s}" height="${9*sc.s}" fill="#c99a5b" stroke="#fff" stroke-width="1.5"/>`;
+        html += `<line x1="${sc.x(9)}" y1="${sc.oy}" x2="${sc.x(9)}" y2="${sc.oy+9*sc.s}" stroke="#fff" stroke-width="1.2"/>`;
+        [9-3,9+3].forEach(px=>{ html += `<line x1="${sc.x(px)}" y1="${sc.oy}" x2="${sc.x(px)}" y2="${sc.oy+9*sc.s}" stroke="#fff" stroke-width="0.8" opacity="0.7"/>`; });
+        return html;
+      }},
+    hoquei_patins: { label:'Hóquei em Patins', group:'oficial', Wm:20, Lm:40,
+      build(sc){
+        const outerH=20*sc.s, outerW=40*sc.s, rx=outerH*0.18;
+        let html = `<rect x="${sc.ox}" y="${sc.oy}" width="${outerW}" height="${outerH}" rx="${rx}" fill="#0d5a8c" stroke="#fff" stroke-width="1.5"/>`;
+        html += `<line x1="${sc.x(20)}" y1="${sc.oy}" x2="${sc.x(20)}" y2="${sc.oy+outerH}" stroke="#fff" stroke-width="1"/>`;
+        html += `<circle cx="${sc.x(20)}" cy="${sc.y(10)}" r="${2*sc.s}" fill="none" stroke="#fff" stroke-width="1"/>`;
+        [0,40].forEach((px,i)=>{ html += `<path d="${arcPath(sc.x(px), sc.y(10), 5*sc.s, i===0?-Math.PI/2:Math.PI/2, i===0?Math.PI/2:Math.PI*1.5)}" fill="none" stroke="#fff" stroke-width="1"/>`; });
+        return html;
+      }},
+    tenis: { label:'Ténis', group:'oficial', Wm:10.97, Lm:23.77,
+      build(sc){
+        let html = `<rect x="${sc.ox}" y="${sc.oy}" width="${23.77*sc.s}" height="${10.97*sc.s}" fill="#1d6e4f" stroke="#fff" stroke-width="1.5"/>`;
+        html += `<rect x="${sc.x(0)}" y="${sc.y(1.37)}" width="${23.77*sc.s}" height="${8.23*sc.s}" fill="none" stroke="#fff" stroke-width="1"/>`;
+        html += `<line x1="${sc.x(11.885)}" y1="${sc.oy}" x2="${sc.x(11.885)}" y2="${sc.oy+10.97*sc.s}" stroke="#fff" stroke-width="1.2"/>`;
+        [11.885-6.4,11.885+6.4].forEach(px=>{ html += `<line x1="${sc.x(px)}" y1="${sc.y(1.37)}" x2="${sc.x(px)}" y2="${sc.y(1.37+8.23)}" stroke="#fff" stroke-width="0.8"/>`; });
+        html += `<line x1="${sc.x(11.885-6.4)}" y1="${sc.y(5.485)}" x2="${sc.x(11.885+6.4)}" y2="${sc.y(5.485)}" stroke="#fff" stroke-width="0.8"/>`;
+        return html;
+      }},
+    padel: { label:'Padel', group:'oficial', Wm:10, Lm:20,
+      build(sc){
+        let html = `<rect x="${sc.ox}" y="${sc.oy}" width="${20*sc.s}" height="${10*sc.s}" fill="#0d5a8c" stroke="#fff" stroke-width="1.5"/>`;
+        html += `<line x1="${sc.x(10)}" y1="${sc.oy}" x2="${sc.x(10)}" y2="${sc.oy+10*sc.s}" stroke="#fff" stroke-width="1.2"/>`;
+        [10-3,10+3].forEach(px=>{ html += `<line x1="${sc.x(px)}" y1="${sc.oy}" x2="${sc.x(px)}" y2="${sc.oy+10*sc.s}" stroke="#fff" stroke-width="0.8"/>`; });
+        html += `<rect x="${sc.ox+2}" y="${sc.oy+2}" width="${20*sc.s-4}" height="${10*sc.s-4}" fill="none" stroke="rgba(255,255,255,0.4)" stroke-width="4" stroke-dasharray="2 6"/>`;
+        return html;
+      }},
+    tenis_mesa: { label:'Ténis de Mesa', group:'oficial', Wm:7, Lm:14,
+      build(sc){
+        let html = `<rect x="${sc.ox}" y="${sc.oy}" width="${14*sc.s}" height="${7*sc.s}" fill="#161f33" stroke="#26314a" stroke-width="1.5" stroke-dasharray="5 3"/>`;
+        html += `<rect x="${sc.x(7-1.37)}" y="${sc.y(3.5-0.7625)}" width="${2.74*sc.s}" height="${1.525*sc.s}" fill="#14508a" stroke="#fff" stroke-width="1"/>`;
+        html += `<line x1="${sc.x(7)}" y1="${sc.y(3.5-0.7625)}" x2="${sc.x(7)}" y2="${sc.y(3.5+0.7625)}" stroke="#fff" stroke-width="0.8"/>`;
+        return html;
+      }},
+    taekwondo: { label:'Taekwondo', group:'oficial', Wm:12, Lm:12, build(sc){ return fightMat(sc,12,8); }},
+    karate:    { label:'Karaté', group:'oficial', Wm:11, Lm:11, build(sc){ return fightMat(sc,11,8); }},
+    judo:      { label:'Judo', group:'oficial', Wm:14, Lm:14,
+      build(sc){
+        let html = fightMat(sc,14,8);
+        html += `<rect x="${sc.x(4)}" y="${sc.y(4)}" width="${6*sc.s}" height="${6*sc.s}" fill="none" stroke="rgba(239,91,91,0.6)" stroke-width="1"/>`;
+        return html;
+      }},
+    boxe: { label:'Boxe', group:'oficial', Wm:7.6, Lm:7.6,
+      build(sc){
+        let html = `<rect x="${sc.ox}" y="${sc.oy}" width="${7.6*sc.s}" height="${7.6*sc.s}" fill="#161f33" stroke="#26314a" stroke-width="1.5"/>`;
+        html += `<rect x="${sc.x(0.75)}" y="${sc.y(0.75)}" width="${6.1*sc.s}" height="${6.1*sc.s}" fill="#0d5a8c" stroke="#fff" stroke-width="1.5"/>`;
+        return html;
+      }},
+    luta_livre: { label:'Luta Livre', group:'oficial', Wm:12, Lm:12,
+      build(sc){
+        let html = `<rect x="${sc.ox}" y="${sc.oy}" width="${12*sc.s}" height="${12*sc.s}" fill="#1d6e4f" stroke="#26314a" stroke-width="1.5"/>`;
+        html += `<circle cx="${sc.x(6)}" cy="${sc.y(6)}" r="${4.5*sc.s}" fill="#f2c14e" fill-opacity="0.15" stroke="#f2c14e" stroke-width="1.2"/>`;
+        html += `<circle cx="${sc.x(6)}" cy="${sc.y(6)}" r="${1*sc.s}" fill="none" stroke="rgba(239,91,91,0.7)" stroke-width="1"/>`;
+        return html;
+      }},
+  };
+
+  function buildFOP(key){
+    fopLayer.innerHTML = '';
+    if(key === 'grelha' || !key){
+      fopTag.style.display = 'none';
+      gridOverlay.style.display = bgImage.style.display==='block' ? 'none' : 'block';
+      return;
+    }
+    const sport = SPORTS[key];
+    const sc = makeScale(sport.Wm, sport.Lm);
+    fopLayer.innerHTML = sport.build(sc);
+    fopTag.textContent = sport.group === 'oficial' ? 'Escala oficial' : 'Esquema genérico';
+    fopTag.className = 'fop-tag ' + sport.group;
+    fopTag.style.display = 'inline-block';
+    gridOverlay.style.display = 'none';
+  }
+  sportSelect.addEventListener('change', ()=>{
+    if(bgImage.style.display === 'block'){ bgImage.style.display = 'none'; bgImage.removeAttribute('href'); document.getElementById('fileInput').value = ''; }
+    buildFOP(sportSelect.value);
+  });
+  document.getElementById('btnUpload').addEventListener('click', ()=> document.getElementById('fileInput').click());
+  document.getElementById('fileInput').addEventListener('change', (e)=>{
+    const file = e.target.files[0]; if(!file) return;
+    const reader = new FileReader();
+    reader.onload = function(ev){
+      bgImage.setAttribute('href', ev.target.result); bgImage.style.display = 'block';
+      fopLayer.innerHTML = ''; fopTag.style.display='none'; gridOverlay.style.display = 'none';
+      sportSelect.value = 'grelha';
+    };
+    reader.readAsDataURL(file);
+  });
+
+  // ---------------- Auto plan: priority-ordered camera roles ----------------
+  // Each role has a default type/category/mount and a position function expressed
+  // as a fraction of the FOP's own Width(W) x Length(L) in metres, so it scales to any court/pitch.
+  // Positions outside the 0..W / 0..L range fall in the "stands"/pitch-side margin around the FOP.
+  const AUTO_ROLES = [
+    {role:'Câmara Principal (Master)',        tipo:'normal',  categoria:'wide',     mont:'Grua / Tripé elevado', pos:(W,L)=>({x:L*0.50, y:W*1.18})},
+    {role:'Curta Elevada — 1ª metade',        tipo:'normal',  categoria:'wide',     mont:'Tripé elevado',        pos:(W,L)=>({x:L*0.25, y:W*1.16})},
+    {role:'Curta Elevada — 2ª metade',        tipo:'normal',  categoria:'wide',     mont:'Tripé elevado',        pos:(W,L)=>({x:L*0.75, y:W*1.16})},
+    {role:'Closeup FOP — 1ª metade',          tipo:'usm',     categoria:'closeup',  mont:'Tripé',                pos:(W,L)=>({x:L*0.20, y:-W*0.08})},
+    {role:'Closeup FOP — 2ª metade',          tipo:'usm',     categoria:'closeup',  mont:'Tripé',                pos:(W,L)=>({x:L*0.80, y:-W*0.08})},
+    {role:'Entrada de Jogadores',             tipo:'minicam', categoria:'special',  mont:'Fixa',                 pos:(W,L)=>({x:-L*0.07, y:W*0.72})},
+    {role:'Flash Interview',                  tipo:'ssm',     categoria:'wide',     mont:'Tripé',                pos:(W,L)=>({x:-L*0.07, y:W*0.28})},
+    {role:'Especial 1ª Linha (Gimbal/Jib)',   tipo:'gimbal',  categoria:'handheld', mont:'Gimbal',               pos:(W,L)=>({x:L*1.06, y:W*0.50})},
+    {role:'SSM 1',                            tipo:'ssm',     categoria:'wide',     mont:'Tripé',                pos:(W,L)=>({x:-L*0.06, y:-W*0.10})},
+    {role:'SSM 2',                            tipo:'ssm',     categoria:'wide',     mont:'Tripé',                pos:(W,L)=>({x:L*1.06, y:W*1.10})},
+  ];
+  function autoGeneratePlan(n){
+    n = Math.max(3, Math.min(10, n||10));
+    const key = sportSelect.value;
+    const sport = SPORTS[key];
+    const Wm = sport ? sport.Wm : 60, Lm = sport ? sport.Lm : 100;
+    const sc = makeScale(Wm, Lm);
+
+    // 1) Place each role at its ideal fractional position, converted to canvas px
+    let placed = AUTO_ROLES.slice(0, n).map(r=>{
+      const p = r.pos(Wm, Lm);
+      return {role:r.role, tipo:r.tipo, categoria:r.categoria, mont:r.mont, px: sc.x(p.x), py: sc.y(p.y)};
+    });
+
+    // 2) Collision-avoidance relaxation: push apart any two cameras closer than minDist
+    const minDist = 42;
+    for(let iter=0; iter<16; iter++){
+      let moved = false;
+      for(let i=0;i<placed.length;i++){
+        for(let j=i+1;j<placed.length;j++){
+          const dx=placed[j].px-placed[i].px, dy=placed[j].py-placed[i].py;
+          const dist = Math.hypot(dx,dy) || 0.01;
+          if(dist < minDist){
+            moved = true;
+            const push = (minDist-dist)/2, ux = dx/dist, uy = dy/dist;
+            placed[i].px -= ux*push; placed[i].py -= uy*push;
+            placed[j].px += ux*push; placed[j].py += uy*push;
+          }
+        }
+      }
+      if(!moved) break;
+    }
+
+    // 3) Safety clamp: guarantee every camera lands inside the visible canvas
+    placed.forEach(p=>{ p.px = Math.max(16, Math.min(984, p.px)); p.py = Math.max(16, Math.min(624, p.py)); });
+
+    // 4) Clear current cameras and commit the plan
+    cameras.forEach(c=>{ const el = document.getElementById('svg-'+c.id); if(el) el.remove(); });
+    cameras = []; camSeq = 1;
+    placed.forEach(p=>{
+      const cam = {id:'c'+camSeq, num:camSeq, x:p.px, y:p.py, tipo:p.tipo, categoria:p.categoria, lente:'', montagem:p.mont, desc:p.role};
+      camSeq++; cameras.push(cam); renderCam(cam);
+    });
+    renderList(); selectItem(null,null);
+  }
+  document.getElementById('btnAutoPlan').addEventListener('click', ()=>{
+    const n = parseInt(document.getElementById('autoCamCount').value) || 10;
+    if(cameras.length && !confirm('Isto substitui as câmaras atuais pelo plano automático. Continuar?')) return;
+    autoGeneratePlan(n);
+  });
+
+  // ---------------- Cameras ----------------
+  function addCamera(x,y){
+    const cam = {id:'c'+camSeq, num:camSeq, x, y, tipo:'normal', categoria:'wide', lente:'', montagem:'Trípode', desc:''};
+    camSeq++; cameras.push(cam); renderCam(cam); renderList(); selectItem('cam', cam.id); setMode('select');
+  }
+  function renderCam(cam){
+    let g = document.getElementById('svg-'+cam.id);
+    if(!g){
+      g = document.createElementNS(svg.namespaceURI, 'g'); g.setAttribute('id', 'svg-'+cam.id); g.setAttribute('class', 'cam-pin');
+      camsLayer.appendChild(g);
+      g.addEventListener('pointerdown', (e)=> startDrag(e,'cam',cam.id));
+    }
+    g.setAttribute('transform', `translate(${cam.x},${cam.y})`);
+    const col = colorForCat(cam.categoria);
+    g.style.color = col;
+    const iconFn = ICONS[cam.tipo] || ICONS.normal;
+    g.innerHTML = iconFn(15) + `<text y="0.5">${cam.num}</text>`;
+    g.querySelectorAll('.ring').forEach(el=>{ el.style.stroke = col; });
+    g.classList.toggle('selected', selected && selected.type==='cam' && selected.id===cam.id);
+  }
+  function miniIcon(tipo, categoria){
+    const col = colorForCat(categoria);
+    const iconFn = ICONS[tipo] || ICONS.normal;
+    return `<svg viewBox="-16 -16 32 32" width="26" height="26" style="color:${col}">${iconFn(13)}</svg>`;
+  }
+  function renderList(){
+    camList.innerHTML = ''; camCount.textContent = cameras.length;
+    cameras.slice().sort((a,b)=>a.num-b.num).forEach(cam=>{
+      const row = document.createElement('div');
+      row.className = 'cam-row' + (selected && selected.type==='cam' && selected.id===cam.id ? ' selected':'');
+      row.innerHTML = `<div class="cam-dot">${miniIcon(cam.tipo, cam.categoria)}</div>
+        <div class="cam-info"><div class="l1">${cam.num} · ${typeFor(cam.tipo).label} · ${catFor(cam.categoria).label}${cam.lente? ' · '+cam.lente:''}</div>
+        <div class="l2">${cam.montagem}${cam.desc? ' — '+cam.desc:''}</div></div>`;
+      row.addEventListener('click', ()=> selectItem('cam', cam.id));
+      camList.appendChild(row);
+    });
+  }
+
+  // ---------------- Annotations ----------------
+  function addAnnot(kind, x, y){
+    const a = kind==='text'
+      ? {id:'a'+annotSeq, kind, x, y, w:140, h:32, text:'Nota'}
+      : {id:'a'+annotSeq, kind, x1:x, y1:y, x2:x+120, y2:y};
+    annotSeq++; annots.push(a); renderAnnot(a); selectItem('annot', a.id); setMode('select');
+  }
+  function renderAnnot(a){
+    let g = document.getElementById('svg-'+a.id);
+    if(a.kind === 'text'){
+      if(!g){
+        g = document.createElementNS(svg.namespaceURI,'g'); g.setAttribute('id','svg-'+a.id);
+        const bg = document.createElementNS(svg.namespaceURI,'rect'); bg.setAttribute('class','annot-text-bg'); bg.setAttribute('rx',5);
+        const txt = document.createElementNS(svg.namespaceURI,'text'); txt.setAttribute('class','annot-text-el');
+        g.appendChild(bg); g.appendChild(txt); annotLayer.appendChild(g);
+        bg.addEventListener('pointerdown', (e)=> startDrag(e,'annot',a.id));
+      }
+      const bg = g.querySelector('.annot-text-bg'), txt = g.querySelector('.annot-text-el');
+      bg.setAttribute('x', a.x); bg.setAttribute('y', a.y); bg.setAttribute('width', a.w); bg.setAttribute('height', a.h);
+      bg.classList.toggle('selected', selected && selected.type==='annot' && selected.id===a.id);
+      txt.setAttribute('x', a.x+10); txt.setAttribute('y', a.y+a.h/2+4); txt.textContent = a.text;
+    } else {
+      if(!g){
+        g = document.createElementNS(svg.namespaceURI,'g'); g.setAttribute('id','svg-'+a.id);
+        const line = document.createElementNS(svg.namespaceURI,'line');
+        line.setAttribute('class', a.kind==='arrow' ? 'annot-arrow' : 'annot-line');
+        line.setAttribute('stroke', '#f2c14e'); line.setAttribute('stroke-width', 2.5);
+        if(a.kind==='arrow') line.setAttribute('marker-end','url(#arrowHead)');
+        else line.setAttribute('stroke-dasharray','7 5');
+        const h1 = document.createElementNS(svg.namespaceURI,'circle'); h1.setAttribute('class','endpoint-handle'); h1.setAttribute('r',7);
+        const h2 = document.createElementNS(svg.namespaceURI,'circle'); h2.setAttribute('class','endpoint-handle'); h2.setAttribute('r',7);
+        g.appendChild(line); g.appendChild(h1); g.appendChild(h2); annotLayer.appendChild(g);
+        line.addEventListener('pointerdown', (e)=> startDrag(e,'annot',a.id));
+        h1.addEventListener('pointerdown', (e)=> startDrag(e,'endpoint',a.id,1));
+        h2.addEventListener('pointerdown', (e)=> startDrag(e,'endpoint',a.id,2));
+      }
+      const line = g.querySelector('line');
+      line.setAttribute('x1',a.x1); line.setAttribute('y1',a.y1); line.setAttribute('x2',a.x2); line.setAttribute('y2',a.y2);
+      const isSel = selected && selected.type==='annot' && selected.id===a.id;
+      line.classList.toggle('selected', isSel);
+      const [h1,h2] = g.querySelectorAll('.endpoint-handle');
+      h1.setAttribute('cx',a.x1); h1.setAttribute('cy',a.y1); h1.classList.toggle('show', isSel);
+      h2.setAttribute('cx',a.x2); h2.setAttribute('cy',a.y2); h2.classList.toggle('show', isSel);
+    }
+  }
+
+  // ---------------- Drag ----------------
+  function startDrag(evt, type, id, endpointNum){
+    if(mode !== 'select') return;
+    evt.stopPropagation();
+    const p0 = svgPoint(evt);
+    if(type==='cam'){ const item = cameras.find(c=>c.id===id); drag = {type,id,offX:p0.x-item.x, offY:p0.y-item.y}; }
+    else if(type==='endpoint'){ drag = {type:'endpoint', id, end:endpointNum}; }
+    else {
+      const a = annots.find(a=>a.id===id);
+      if(a.kind==='text') drag = {type,id,offX:p0.x-a.x, offY:p0.y-a.y};
+      else drag = {type,id,startX:p0.x,startY:p0.y,orig:{x1:a.x1,y1:a.y1,x2:a.x2,y2:a.y2}};
+    }
+    document.getElementById('svg-'+id).classList.add('dragging');
+    selectItem(type==='endpoint' ? 'annot' : type, id);
+    window.addEventListener('pointermove', onDragMove);
+    window.addEventListener('pointerup', onDragEnd);
+  }
+  function onDragMove(evt){
+    if(!drag) return;
+    const p = svgPoint(evt);
+    const nx = Math.max(0,Math.min(1000,p.x)), ny = Math.max(0,Math.min(640,p.y));
+    if(drag.type==='cam'){
+      const cam = cameras.find(c=>c.id===drag.id);
+      cam.x = Math.max(0,Math.min(1000,p.x-drag.offX)); cam.y = Math.max(0,Math.min(640,p.y-drag.offY)); renderCam(cam);
+    } else if(drag.type==='endpoint'){
+      const a = annots.find(a=>a.id===drag.id);
+      if(drag.end===1){ a.x1 = nx; a.y1 = ny; } else { a.x2 = nx; a.y2 = ny; }
+      renderAnnot(a);
+    } else {
+      const a = annots.find(a=>a.id===drag.id);
+      if(a.kind==='text'){ a.x = Math.max(0,Math.min(1000-a.w,p.x-drag.offX)); a.y = Math.max(0,Math.min(640-a.h,p.y-drag.offY)); }
+      else {
+        const dx = p.x-drag.startX, dy = p.y-drag.startY;
+        a.x1 = drag.orig.x1+dx; a.y1 = drag.orig.y1+dy; a.x2 = drag.orig.x2+dx; a.y2 = drag.orig.y2+dy;
+      }
+      renderAnnot(a);
+    }
+  }
+  function onDragEnd(){
+    if(drag){ const el = document.getElementById('svg-'+drag.id); if(el) el.classList.remove('dragging'); }
+    drag = null;
+    window.removeEventListener('pointermove', onDragMove);
+    window.removeEventListener('pointerup', onDragEnd);
+  }
+
+  svg.addEventListener('pointerdown', (evt)=>{
+    if(evt.target.closest('.cam-pin') || evt.target.closest('[id^="svg-a"]')) return;
+    const p = svgPoint(evt);
+    if(mode === 'add-cam') addCamera(Math.round(p.x), Math.round(p.y));
+    else if(mode === 'add-arrow') addAnnot('arrow', Math.round(p.x), Math.round(p.y));
+    else if(mode === 'add-dash') addAnnot('dash', Math.round(p.x), Math.round(p.y));
+    else if(mode === 'add-text') addAnnot('text', Math.round(p.x), Math.round(p.y));
+    else selectItem(null,null);
+  });
+
+  function setMode(m){
+    mode = m;
+    ['btnAddCam','btnAddArrow','btnAddDash','btnAddText'].forEach(id=> document.getElementById(id).classList.remove('active'));
+    const map = {'add-cam':'btnAddCam','add-arrow':'btnAddArrow','add-dash':'btnAddDash','add-text':'btnAddText'};
+    if(map[m]) document.getElementById(map[m]).classList.add('active');
+    svg.classList.toggle('mode-select', m==='select');
+    const hints = {'add-cam':'Clica no plano para colocar a câmara','add-arrow':'Clica para colocar uma seta (arrasta as pontas para ajustar)','add-dash':'Clica para colocar uma linha tracejada','add-text':'Clica para colocar uma caixa de texto'};
+    modeHint.textContent = hints[m] || 'Modo: seleção — arrasta elementos, clica para editar';
+    modeHint.classList.toggle('on', m!=='select');
+  }
+  document.getElementById('btnAddCam').addEventListener('click', ()=> setMode(mode==='add-cam' ? 'select' : 'add-cam'));
+  document.getElementById('btnAddArrow').addEventListener('click', ()=> setMode(mode==='add-arrow' ? 'select' : 'add-arrow'));
+  document.getElementById('btnAddDash').addEventListener('click', ()=> setMode(mode==='add-dash' ? 'select' : 'add-dash'));
+  document.getElementById('btnAddText').addEventListener('click', ()=> setMode(mode==='add-text' ? 'select' : 'add-text'));
+
+  function selectItem(type, id){
+    selected = type ? {type, id} : null;
+    cameras.forEach(renderCam); annots.forEach(renderAnnot); renderList(); buildEditor();
+  }
+  function buildEditor(){
+    if(!selected){ editorEmpty.style.display = 'block'; editorForm.style.display = 'none'; return; }
+    editorEmpty.style.display = 'none'; editorForm.style.display = 'block';
+    if(selected.type === 'cam'){
+      const cam = cameras.find(c=>c.id===selected.id);
+      editorForm.innerHTML = `
+        <div class="field-row">
+          <div class="field"><label>Número</label><input type="number" id="f-num" value="${cam.num}"></div>
+          <div class="field"><label>Lente</label><input type="text" id="f-lente" value="${cam.lente}" placeholder="ex. 22x"></div>
+        </div>
+        <div class="field-row">
+          <div class="field"><label>Tipo</label><select id="f-tipo">${TYPES.map(t=>`<option value="${t.key}" ${t.key===cam.tipo?'selected':''}>${t.label}</option>`).join('')}</select></div>
+          <div class="field"><label>Categoria</label><select id="f-cat">${CATEGORIES.map(c=>`<option value="${c.key}" ${c.key===cam.categoria?'selected':''}>${c.label}</option>`).join('')}</select></div>
+        </div>
+        <div class="field"><label>Montagem</label><input type="text" id="f-mont" value="${cam.montagem}" placeholder="Trípode / Steadicam / Grua..."></div>
+        <div class="field"><label>Descrição / posição</label><textarea id="f-desc" placeholder="ex. FOP, recta direita">${cam.desc}</textarea></div>
+        <button class="del-btn" id="f-del">Remover câmara</button>`;
+      const upd = ()=>{
+        cam.num = parseInt(document.getElementById('f-num').value)||cam.num;
+        cam.lente = document.getElementById('f-lente').value;
+        cam.tipo = document.getElementById('f-tipo').value;
+        cam.categoria = document.getElementById('f-cat').value;
+        cam.montagem = document.getElementById('f-mont').value;
+        cam.desc = document.getElementById('f-desc').value;
+        renderCam(cam); renderList();
+      };
+      ['f-num','f-lente','f-tipo','f-cat','f-mont','f-desc'].forEach(id=> document.getElementById(id).addEventListener('input', upd));
+      document.getElementById('f-del').addEventListener('click', ()=>{
+        cameras = cameras.filter(c=>c.id!==cam.id); document.getElementById('svg-'+cam.id).remove(); selectItem(null,null);
+      });
+    } else {
+      const a = annots.find(a=>a.id===selected.id);
+      if(a.kind === 'text'){
+        editorForm.innerHTML = `<div class="field"><label>Texto</label><textarea id="f-atext">${a.text}</textarea></div>
+          <button class="del-btn" id="f-adel">Remover anotação</button>`;
+        document.getElementById('f-atext').addEventListener('input', ()=>{ a.text = document.getElementById('f-atext').value; renderAnnot(a); });
+      } else {
+        editorForm.innerHTML = `<div class="empty-note">${a.kind==='arrow'?'Seta':'Linha tracejada'} — arrasta a linha no plano para reposicionar.</div>
+          <button class="del-btn" id="f-adel">Remover anotação</button>`;
+      }
+      document.getElementById('f-adel').addEventListener('click', ()=>{
+        annots = annots.filter(x=>x.id!==a.id); document.getElementById('svg-'+a.id).remove(); selectItem(null,null);
+      });
+    }
+  }
+
+  // ---------------- Export (white/print background) ----------------
+  function buildExportDoc(){
+    const root = document.getElementById('exportRoot'); root.innerHTML = '';
+    const wasSelected = selected; selectItem(null,null);
+    const header = document.createElement('div'); header.className = 'exp-header';
+    header.innerHTML = `<div><span class="mark">GF</span><h2>${document.getElementById('docEvento').value || 'Mapa de Câmaras'}</h2>
+      <div class="sub">MAPA DE CÂMARAS — POSICIONAMENTO DE MEIOS</div></div>
+      <div class="date">${document.getElementById('docData').value || ''}</div>`;
+    root.appendChild(header);
+    const canvasBox = document.createElement('div'); canvasBox.className = 'exp-canvas-box';
+    const clone = svg.cloneNode(true); clone.removeAttribute('style'); clone.style.width = '100%'; clone.style.display = 'block';
+    clone.querySelector('#gridOverlay').style.display = 'none';
+    const cloneBgRect = clone.querySelector('#bgRect'); if(cloneBgRect) cloneBgRect.setAttribute('fill', '#ffffff');
+    canvasBox.appendChild(clone); root.appendChild(canvasBox);
+    const usedTypes = [...new Set(cameras.map(c=>c.tipo+'|'+c.categoria))];
+    if(usedTypes.length){
+      const legend = document.createElement('div'); legend.className = 'exp-legend';
+      legend.innerHTML = usedTypes.map(k=>{ const [t,c]=k.split('|'); return `<div class="sw">${miniIcon(t,c)}${typeFor(t).label} (${catFor(c).label})</div>`; }).join('');
+      root.appendChild(legend);
+    }
+    const summary = document.createElement('div'); summary.className = 'exp-summary';
+    summary.innerHTML = `<div class="stat"><div class="n">${cameras.length}</div><div class="l">Câmaras</div></div>`;
+    root.appendChild(summary);
+    if(cameras.length){
+      const table = document.createElement('table'); table.className = 'exp-table';
+      table.innerHTML = `<thead><tr><th>Nº</th><th>Tipo</th><th>Categoria</th><th>Lente</th><th>Montagem</th><th>Descrição / posição</th></tr></thead>
+        <tbody>${cameras.slice().sort((a,b)=>a.num-b.num).map(c=>`<tr><td>${miniIcon(c.tipo,c.categoria)}</td><td>${typeFor(c.tipo).label}</td><td>${catFor(c.categoria).label}</td><td>${c.lente||'—'}</td><td>${c.montagem||'—'}</td><td>${c.desc||'—'}</td></tr>`).join('')}</tbody>`;
+      root.appendChild(table);
+    }
+    return ()=> selectItem(wasSelected ? wasSelected.type : null, wasSelected ? wasSelected.id : null);
+  }
+  document.getElementById('btnPng').addEventListener('click', ()=>{
+    const restore = buildExportDoc();
+    setTimeout(()=>{
+      html2canvas(document.getElementById('exportRoot'), {backgroundColor:'#ffffff', scale:2}).then(canvas=>{
+        const link = document.createElement('a'); link.download = 'mapa-cameras.png'; link.href = canvas.toDataURL('image/png'); link.click();
+        restore();
+      });
+    }, 60);
+  });
+  document.getElementById('btnPdf').addEventListener('click', ()=>{
+    const restore = buildExportDoc();
+    setTimeout(()=>{
+      html2canvas(document.getElementById('exportRoot'), {backgroundColor:'#ffffff', scale:2}).then(canvas=>{
+        const { jsPDF } = window.jspdf;
+        const ratio = canvas.height / canvas.width;
+        const pdf = new jsPDF({orientation:'p', unit:'mm', format:'a4'});
+        const pageW = pdf.internal.pageSize.getWidth(), pageH = pdf.internal.pageSize.getHeight();
+        let w = pageW - 16, h = w*ratio;
+        if(h <= pageH-16){ pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 8, 8, w, h); }
+        else {
+          const pxPerMm = canvas.width / w, pageHeightPx = (pageH-16) * pxPerMm;
+          let renderedPx = 0;
+          while(renderedPx < canvas.height){
+            const sliceH = Math.min(pageHeightPx, canvas.height - renderedPx);
+            const sliceCanvas = document.createElement('canvas');
+            sliceCanvas.width = canvas.width; sliceCanvas.height = sliceH;
+            const ctx = sliceCanvas.getContext('2d');
+            ctx.fillStyle = '#ffffff'; ctx.fillRect(0,0,sliceCanvas.width,sliceCanvas.height);
+            ctx.drawImage(canvas, 0, renderedPx, canvas.width, sliceH, 0, 0, canvas.width, sliceH);
+            if(renderedPx > 0) pdf.addPage();
+            pdf.addImage(sliceCanvas.toDataURL('image/png'), 'PNG', 8, 8, w, sliceH/pxPerMm);
+            renderedPx += sliceH;
+          }
+        }
+        pdf.save('mapa-cameras.pdf'); restore();
+      });
+    }, 60);
+  });
+
+  buildFOP('grelha');
+  setMode('select'); selectItem(null,null);
+
+  // Regista o service worker (só funciona se servido via HTTPS ou localhost)
+  if('serviceWorker' in navigator){
+    window.addEventListener('load', ()=>{
+      navigator.serviceWorker.register('service-worker.js').catch(()=>{ /* sem hosting HTTPS, ignora silenciosamente */ });
+    });
+  }
+})();
+</script>
+</body>
+</html>
